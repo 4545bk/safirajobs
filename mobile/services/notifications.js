@@ -9,7 +9,7 @@ import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 
 // Backend API URL (same as api.js)
-const API_BASE_URL = 'http://localhost:3000/api';
+const API_BASE_URL = Constants.expoConfig?.extra?.apiUrl || 'http://10.0.2.2:3000/api';
 
 // Configure how notifications are handled when app is in foreground
 Notifications.setNotificationHandler({

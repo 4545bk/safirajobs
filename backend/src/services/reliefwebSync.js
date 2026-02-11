@@ -10,7 +10,7 @@ const APP_NAME = process.env.RELIEFWEB_APPNAME || 'safirajobs';
 
 // Retry configuration
 const RETRY_CONFIG = {
-    maxAttempts: 5,
+    maxAttempts: 1,
     baseDelayMs: 1000,  // 1 second
     maxDelayMs: 30000,  // 30 seconds max
 };
@@ -84,7 +84,7 @@ const transformJob = (rwJob) => {
         category: mapCategory(fields.career_categories),
         experienceLevel: mapExperienceLevel(fields.experience),
         description: fields.body || '',
-        applyUrl: fields.url || `https://reliefweb.int/job/${rwJob.id}`,
+        applyUrl: `https://reliefweb.int/job/${rwJob.id}`,
         postedDate: fields.date?.created ? new Date(fields.date.created) : new Date(),
         closingDate: fields.date?.closing ? new Date(fields.date.closing) : null
     };
@@ -118,8 +118,10 @@ const fetchReliefWebJobs = async (offset = 0, limit = 100) => {
         },
         headers: {
             'Content-Type': 'application/json',
-            'User-Agent': 'SafiraJobs/1.0 (https://safirajobs.com; contact@safirajobs.com)',
-            'Accept': 'application/json'
+            'Accept': 'application/json',
+            'User-Agent': `${APP_NAME}/1.0`,
+            'Referer': 'https://safirajobs.com',
+            'Origin': 'https://safirajobs.com'
         },
         timeout: 30000,
     });

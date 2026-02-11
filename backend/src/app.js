@@ -9,8 +9,12 @@ const helmet = require('helmet');
 const connectDB = require('./config/database');
 const jobRoutes = require('./routes/jobs');
 const deviceRoutes = require('./routes/devices');
+const cvRoutes = require('./routes/cv');
+const analyticsRoutes = require('./routes/analytics'); // Added analytics routes import
 const errorHandler = require('./middleware/errorHandler');
+const pdfGenerator = require('./services/pdfGenerator');
 const { syncJobs, cleanupJobs } = require('./services/reliefwebSync');
+const { syncMultiSourceJobs, clearExternalJobs } = require('./services/multiSourceSync');
 const { getStats: getCacheStats } = require('./middleware/cache');
 const logger = require('./utils/logger');
 
@@ -81,6 +85,14 @@ app.use((req, res, next) => {
 // ===================
 app.use('/api/jobs', jobRoutes);
 app.use('/api/devices', deviceRoutes);
+app.use('/api/cv', cvRoutes);
+app.use('/api/alerts', require('./routes/alerts'));
+app.use('/api/applications', require('./routes/applications'));
+app.use('/api/auth', require('./routes/auth'));
+app.use('/api/employer', require('./routes/employer'));
+app.use('/api/analytics', analyticsRoutes);
+app.use('/api/upload', require('./routes/upload'));
+app.use('/api/apply', require('./routes/apply'));
 
 // Health check with cache stats
 app.get('/api/health', (req, res) => {
@@ -117,6 +129,54 @@ app.delete('/api/seed', async (req, res) => {
         res.json({
             success: true,
             message: `Removed ${count} sample jobs`
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ===================
+// Multi-Source Job Sync (Real Jobs from Multiple APIs)
+// ===================
+
+/**
+ * POST /api/sync-multi
+ * Sync jobs from multiple real APIs (RemoteOK, Arbeitnow, Remotive)
+ * No API key required - all free sources
+ */
+app.post('/api/sync-multi', syncLimiter, async (req, res) => {
+    try {
+        logger.info('Multi-source sync triggered');
+        const result = await syncMultiSourceJobs();
+
+        res.json({
+            success: result.success,
+            message: result.success ? 'Multi-source sync completed' : 'Sync failed',
+            data: {
+                fetched: result.fetched,
+                created: result.created,
+                updated: result.updated,
+                errors: result.errors,
+                sources: result.sources,
+            },
+            error: result.errorMessage,
+        });
+    } catch (error) {
+        logger.error('Multi-source sync endpoint error', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+/**
+ * DELETE /api/sync-multi
+ * Clear all jobs from external sources
+ */
+app.delete('/api/sync-multi', async (req, res) => {
+    try {
+        const count = await clearExternalJobs();
+        res.json({
+            success: true,
+            message: `Removed ${count} external jobs`
         });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
@@ -258,6 +318,10 @@ const startServer = async () => {
         // Connect to MongoDB
         await connectDB();
 
+        // Initialize PDF Generator
+        await pdfGenerator.init();
+        console.log('PDF Generator initialized');
+
         // Schedule internal cron job as fallback (every 6 hours by default)
         const cronSchedule = process.env.SYNC_CRON_SCHEDULE || '0 */6 * * *';
         cron.schedule(cronSchedule, async () => {
@@ -283,9 +347,15 @@ const startServer = async () => {
         });
         logger.info('Daily cleanup cron scheduled: 0 2 * * * (2 AM daily)');
 
-        // Run initial sync on startup
+        // Run initial sync on startup (both sources, neither blocks the server)
         console.log('Running initial sync on startup...');
-        syncJobs().catch(err => console.error('Initial sync failed:', err.message));
+        Promise.allSettled([
+            syncJobs().catch(err => console.warn('⚠️  ReliefWeb sync skipped:', err.message)),
+            syncMultiSourceJobs().catch(err => console.warn('⚠️  Multi-source sync skipped:', err.message)),
+        ]).then(results => {
+            const succeeded = results.filter(r => r.status === 'fulfilled').length;
+            console.log(`✅ Initial sync complete (${succeeded}/${results.length} sources succeeded)`);
+        });
 
         // Start listening
         app.listen(PORT, () => {

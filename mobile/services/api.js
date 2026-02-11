@@ -4,13 +4,10 @@
  */
 
 import * as storage from './storage';
+import Constants from 'expo-constants';
 
-// API URL Configuration:
-// - Android Emulator: 10.0.2.2 (points to host's localhost)
-// - Genymotion: 10.0.3.2
-// - Physical device on same WiFi: use your computer's IP
-// - Production: https://safirajobs-api.onrender.com/api
-const API_BASE_URL = 'http://10.0.2.2:3000/api';
+// API URL from app.json extra config
+const API_BASE_URL = Constants.expoConfig?.extra?.apiUrl || 'http://10.0.2.2:3000/api';
 
 // Request timeout (10 seconds)
 const TIMEOUT = 10000;
@@ -43,9 +40,12 @@ export const getJobs = async ({
     location,
     category,
     experience,
-    search
+    search,
+    workType,
+    contractType,
+    postedWithin
 } = {}) => {
-    const filters = { page, limit, location, category, experience, search };
+    const filters = { page, limit, location, category, experience, search, workType, contractType, postedWithin };
 
     try {
         // Build query params
@@ -54,6 +54,9 @@ export const getJobs = async ({
         if (category) params.append('category', category);
         if (experience) params.append('experience', experience);
         if (search) params.append('search', search);
+        if (workType) params.append('workType', workType);
+        if (contractType) params.append('contractType', contractType);
+        if (postedWithin) params.append('postedWithin', postedWithin);
 
         // Try network first
         const response = await fetchWithTimeout(`${API_BASE_URL}/jobs?${params}`);

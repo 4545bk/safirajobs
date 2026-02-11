@@ -1,15 +1,36 @@
+/**
+ * Root Layout - Updated for Figma Light Theme
+ */
+
 import { useEffect, useRef } from 'react';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { colors } from '../styles/global';
+// import { colors } from '../theme'; // Replaced by dynamic theme
 import {
     registerForPushNotifications,
     registerTokenWithBackend,
     addNotificationReceivedListener,
     addNotificationResponseListener,
 } from '../services/notifications';
+import { useTheme } from '../context/ThemeContext';
 
-export default function RootLayout() {
+import { ThemeProvider } from '../context/ThemeContext';
+import { LanguageProvider } from '../context/LanguageContext';
+import ErrorBoundary from '../components/ErrorBoundary';
+
+export default function RootLayoutWrapper() {
+    return (
+        <ErrorBoundary>
+            <LanguageProvider>
+                <ThemeProvider>
+                    <RootLayout />
+                </ThemeProvider>
+            </LanguageProvider>
+        </ErrorBoundary>
+    );
+}
+
+function RootLayout() {
     const router = useRouter();
     const notificationListener = useRef();
     const responseListener = useRef();
@@ -59,35 +80,126 @@ export default function RootLayout() {
         }
     };
 
+    const { colors, isDark } = useTheme();
+
     return (
         <>
-            <StatusBar style="light" />
+            <StatusBar style={isDark ? "light" : "dark"} />
             <Stack
                 screenOptions={{
                     headerStyle: {
                         backgroundColor: colors.background,
                     },
-                    headerTintColor: colors.text,
+                    headerTintColor: colors.textPrimary,
                     headerTitleStyle: {
                         fontWeight: '600',
                     },
                     contentStyle: {
                         backgroundColor: colors.background,
                     },
+                    headerShadowVisible: false,
                 }}
             >
                 <Stack.Screen
                     name="index"
                     options={{
-                        title: 'SafiraJobs',
-                        headerShown: true,
+                        headerShown: false,
+                    }}
+                />
+                <Stack.Screen
+                    name="auth"
+                    options={{
+                        headerShown: false,
+                    }}
+                />
+                <Stack.Screen
+                    name="home"
+                    options={{
+                        headerShown: false,
                     }}
                 />
                 <Stack.Screen
                     name="job/[id]"
                     options={{
-                        title: 'Job Details',
-                        headerBackTitle: 'Back',
+                        headerShown: false,
+                    }}
+                />
+                <Stack.Screen
+                    name="profile"
+                    options={{
+                        headerShown: false,
+                    }}
+                />
+                <Stack.Screen
+                    name="bookmarks"
+                    options={{
+                        headerShown: false,
+                    }}
+                />
+                <Stack.Screen
+                    name="alerts"
+                    options={{
+                        headerShown: false,
+                    }}
+                />
+                <Stack.Screen
+                    name="quickapply"
+                    options={{
+                        headerShown: false,
+                    }}
+                />
+                <Stack.Screen
+                    name="applications"
+                    options={{
+                        headerShown: false,
+                    }}
+                />
+                <Stack.Screen
+                    name="company/[name]"
+                    options={{
+                        headerShown: false,
+                    }}
+                />
+                <Stack.Screen
+                    name="explore"
+                    options={{
+                        headerShown: false,
+                    }}
+                />
+                <Stack.Screen
+                    name="interviews"
+                    options={{
+                        headerShown: false,
+                    }}
+                />
+                <Stack.Screen
+                    name="manage-profile"
+                    options={{
+                        headerShown: false,
+                    }}
+                />
+                <Stack.Screen
+                    name="privacy-policy"
+                    options={{
+                        headerShown: false,
+                    }}
+                />
+                <Stack.Screen
+                    name="terms-of-service"
+                    options={{
+                        headerShown: false,
+                    }}
+                />
+                <Stack.Screen
+                    name="change-password"
+                    options={{
+                        headerShown: false,
+                    }}
+                />
+                <Stack.Screen
+                    name="language"
+                    options={{
+                        headerShown: false,
                     }}
                 />
             </Stack>

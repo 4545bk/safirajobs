@@ -3,6 +3,8 @@ const { query, param, validationResult } = require('express-validator');
 const Job = require('../models/Job');
 const { API_LIMITS } = require('../models/Job');
 const { cacheMiddleware } = require('../middleware/cache');
+const { optionalAuthenticate } = require('./auth');
+const { addMatchDataToJobs } = require('../services/jobMatching');
 
 const router = express.Router();
 
@@ -93,7 +95,7 @@ const getJobValidation = [
  * - posted: By posted date (newest first)
  * - created: By created date (newest first)
  */
-router.get('/', cacheMiddleware(5 * 60 * 1000), listJobsValidation, validate, async (req, res, next) => {
+router.get('/', optionalAuthenticate, cacheMiddleware(5 * 60 * 1000), listJobsValidation, validate, async (req, res, next) => {
     try {
         const {
             page = 1,
@@ -121,6 +123,27 @@ router.get('/', cacheMiddleware(5 * 60 * 1000), listJobsValidation, validate, as
         // Experience filter (exact match - uses index)
         if (experience) {
             queryObj.experienceLevel = experience;
+        }
+
+        // Work Type filter
+        if (req.query.workType && req.query.workType !== 'All') {
+            queryObj.workType = req.query.workType.toLowerCase();
+        }
+
+        // Contract Type filter
+        if (req.query.contractType && req.query.contractType !== 'All') {
+            // Clean up the input to match enum (e.g. "Full-Time" -> "full-time")
+            queryObj.contractType = req.query.contractType.toLowerCase().replace(' ', '-');
+        }
+
+        // Posted Within filter (Date Logic)
+        if (req.query.postedWithin && req.query.postedWithin !== 'all') {
+            const days = parseInt(req.query.postedWithin);
+            if (!isNaN(days)) {
+                const date = new Date();
+                date.setDate(date.getDate() - days);
+                queryObj.postedDate = { $gte: date };
+            }
         }
 
         // Text search (uses text index)
@@ -156,7 +179,7 @@ router.get('/', cacheMiddleware(5 * 60 * 1000), listJobsValidation, validate, as
         }
 
         // Execute query with indexes
-        const [jobs, total] = await Promise.all([
+        let [jobs, total] = await Promise.all([
             Job.find(queryObj)
                 .select('-description -__v') // Exclude full description and version key
                 .sort(sortOrder)
@@ -165,6 +188,11 @@ router.get('/', cacheMiddleware(5 * 60 * 1000), listJobsValidation, validate, as
                 .lean(),
             Job.countDocuments(queryObj)
         ]);
+
+        // Calculate match scores if user is logged in
+        if (req.user) {
+            jobs = await addMatchDataToJobs(jobs, req.user._id);
+        }
 
         res.json({
             success: true,
@@ -214,6 +242,92 @@ router.get('/:id', cacheMiddleware(10 * 60 * 1000), getJobValidation, validate, 
                 error: 'Job not found'
             });
         }
+        next(error);
+    }
+});
+
+/**
+ * GET /api/jobs/:id/similar
+ * Get similar jobs based on category, location, experience level
+ */
+router.get('/:id/similar', cacheMiddleware(10 * 60 * 1000), getJobValidation, validate, async (req, res, next) => {
+    try {
+        const job = await Job.findById(req.params.id).lean();
+
+        if (!job) {
+            return res.status(404).json({ success: false, error: 'Job not found' });
+        }
+
+        // Find similar jobs by category and location
+        const similarJobs = await Job.find({
+            _id: { $ne: job._id },
+            $or: [
+                { category: job.category },
+                { location: { $regex: job.location?.split(',')[0] || '', $options: 'i' } },
+                { organization: job.organization }
+            ],
+            closingDate: { $gte: new Date() }
+        })
+            .select('-description -__v')
+            .sort({ category: job.category ? -1 : 1, postedDate: -1 })
+            .limit(5)
+            .lean();
+
+        res.json({ success: true, count: similarJobs.length, data: similarJobs });
+    } catch (error) {
+        next(error);
+    }
+});
+
+/**
+ * GET /api/jobs/company/:name
+ * Get all jobs from a specific company/organization
+ */
+router.get('/company/:name', cacheMiddleware(10 * 60 * 1000), async (req, res, next) => {
+    try {
+        const { name } = req.params;
+        const { page = 1, limit = 20 } = req.query;
+
+        const query = {
+            organization: { $regex: name, $options: 'i' },
+            $or: [
+                { closingDate: { $gte: new Date() } },
+                { closingDate: null }
+            ]
+        };
+
+        const [jobs, total] = await Promise.all([
+            Job.find(query)
+                .select('-description -__v')
+                .sort({ postedDate: -1 })
+                .skip((page - 1) * limit)
+                .limit(parseInt(limit))
+                .lean(),
+            Job.countDocuments(query)
+        ]);
+
+        // Get company info from first job
+        const companyInfo = jobs.length > 0 ? {
+            name: jobs[0].organization,
+            totalJobs: total,
+            categories: [...new Set(jobs.map(j => j.category).filter(Boolean))],
+            locations: [...new Set(jobs.map(j => j.location).filter(Boolean))]
+        } : null;
+
+        res.json({
+            success: true,
+            data: {
+                company: companyInfo,
+                jobs,
+                pagination: {
+                    page: parseInt(page),
+                    limit: parseInt(limit),
+                    total,
+                    pages: Math.ceil(total / limit)
+                }
+            }
+        });
+    } catch (error) {
         next(error);
     }
 });
