@@ -318,9 +318,14 @@ const startServer = async () => {
         // Connect to MongoDB
         await connectDB();
 
-        // Initialize PDF Generator
-        await pdfGenerator.init();
-        console.log('PDF Generator initialized');
+        // Initialize PDF Generator (optional - won't block server start if Chrome is missing)
+        try {
+            await pdfGenerator.init();
+            console.log('✅ PDF Generator initialized');
+        } catch (error) {
+            console.warn('⚠️  PDF Generator failed to initialize:', error.message);
+            console.warn('   CV PDFs will not be available, but server will continue running');
+        }
 
         // Schedule internal cron job as fallback (every 6 hours by default)
         const cronSchedule = process.env.SYNC_CRON_SCHEDULE || '0 */6 * * *';

@@ -345,7 +345,7 @@ const generateEthiopianJobs = () => {
  * Map job type to experience level
  */
 const mapJobType = (jobType) => {
-    if (!jobType) return 'Mid';
+    if (!jobType || typeof jobType !== 'string') return 'Mid';
     const type = jobType.toLowerCase();
     if (type.includes('intern') || type.includes('junior') || type.includes('entry') || type.includes('associate')) return 'Entry';
     if (type.includes('senior') || type.includes('lead') || type.includes('director') || type.includes('manager') || type.includes('head')) return 'Senior';
