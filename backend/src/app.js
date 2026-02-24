@@ -216,21 +216,26 @@ app.get('/api/cron/sync', syncLimiter, async (req, res, next) => {
 
         logger.info('External cron sync triggered');
         const startTime = Date.now();
-        const stats = await syncJobs();
+
+        // Sync from ALL sources (ReliefWeb + multi-source APIs)
+        const [reliefWebResult, multiSourceResult] = await Promise.allSettled([
+            syncJobs(),
+            syncMultiSourceJobs(),
+        ]);
+
         const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+        const stats = reliefWebResult.status === 'fulfilled' ? reliefWebResult.value : { success: false };
+        const multiStats = multiSourceResult.status === 'fulfilled' ? multiSourceResult.value : { success: false };
 
         // Return structured response based on sync result
-        if (stats.success) {
+        if (stats.success || multiStats.success) {
             res.json({
                 success: true,
-                message: 'Sync completed',
+                message: 'Sync completed (all sources)',
                 duration: `${duration}s`,
                 stats: {
-                    fetched: stats.fetched,
-                    created: stats.created,
-                    updated: stats.updated,
-                    deleted: stats.deleted,
-                    errors: stats.errors
+                    reliefWeb: stats,
+                    multiSource: multiStats,
                 }
             });
         } else {
@@ -296,12 +301,13 @@ app.use(errorHandler);
 const KEEP_ALIVE_INTERVAL = 14 * 60 * 1000; // 14 minutes
 
 const startKeepAlive = () => {
-    if (process.env.NODE_ENV === 'production' && process.env.RENDER_EXTERNAL_URL) {
-        console.log('Keep-alive pings enabled');
+    const externalUrl = process.env.RENDER_EXTERNAL_URL || 'https://safirajobs.onrender.com';
+    if (process.env.NODE_ENV === 'production') {
+        console.log('Keep-alive pings enabled →', externalUrl);
 
         setInterval(async () => {
             try {
-                const response = await fetch(`${process.env.RENDER_EXTERNAL_URL}/api/health`);
+                const response = await fetch(`${externalUrl}/api/health`);
                 console.log(`Keep-alive ping: ${response.status}`);
             } catch (error) {
                 console.error('Keep-alive ping failed:', error.message);
@@ -330,10 +336,13 @@ const startServer = async () => {
         // Schedule internal cron job as fallback (every 6 hours by default)
         const cronSchedule = process.env.SYNC_CRON_SCHEDULE || '0 */6 * * *';
         cron.schedule(cronSchedule, async () => {
-            console.log('Running internal scheduled sync...');
+            console.log('Running internal scheduled sync (all sources)...');
             try {
-                await syncJobs();
-                console.log('Internal sync completed');
+                await Promise.allSettled([
+                    syncJobs().catch(err => console.warn('⚠️  ReliefWeb sync failed:', err.message)),
+                    syncMultiSourceJobs().catch(err => console.warn('⚠️  Multi-source sync failed:', err.message)),
+                ]);
+                console.log('Internal sync completed (all sources)');
             } catch (error) {
                 console.error('Internal sync failed:', error.message);
             }

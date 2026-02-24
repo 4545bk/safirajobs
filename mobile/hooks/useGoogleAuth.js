@@ -8,7 +8,7 @@ import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
-import { makeRedirectUri } from 'expo-auth-session';
+import Constants from 'expo-constants';
 
 // Complete auth session for web browser
 WebBrowser.maybeCompleteAuthSession();
@@ -35,11 +35,11 @@ export default function useGoogleAuth() {
         }
     }, []);
 
-    // Configure Google Auth request with redirect
-    const redirectUri = makeRedirectUri({
-        scheme: 'safirajobs',
-        path: 'auth',
-    });
+    // Use Expo's auth proxy as the redirect URI.
+    // Google requires HTTPS redirects for Web OAuth clients.
+    // The proxy at auth.expo.io receives the callback over HTTPS, 
+    // then redirects back to the app via its custom scheme.
+    const redirectUri = 'https://auth.expo.io/@zeberga/safirajobs';
 
     const [request, response, promptAsync] = Google.useAuthRequest({
         androidClientId: GOOGLE_CONFIG.androidClientId,
