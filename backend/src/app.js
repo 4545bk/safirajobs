@@ -59,8 +59,9 @@ app.use(helmet());
 // CORS
 app.use(cors());
 
-// JSON body parser
-app.use(express.json());
+// JSON body parser (10MB limit for base64 image uploads)
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Apply general rate limit to all API routes
 app.use('/api/', apiLimiter);

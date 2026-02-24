@@ -11,6 +11,9 @@
             "distribution": "internal",
             "android": {
                 "buildType": "apk"
+            },
+            "env": {
+                "API_URL": "https://safirajobs.onrender.com/api"
             }
         },
         "production": {
